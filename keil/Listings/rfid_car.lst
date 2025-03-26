@@ -1,0 +1,240 @@
+C51 COMPILER V9.60.7.0   RFID_CAR                                                          03/25/2025 11:42:24 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE RFID_CAR
+OBJECT MODULE PLACED IN .\Objects\rfid_car.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE rfid_car.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\
+                    -rfid_car.lst) TABS(2) OBJECT(.\Objects\rfid_car.obj)
+
+line level    source
+
+   1          #include <reg51.h>
+   2          #include <string.h>
+   3          
+   4          // Pin Definitions
+   5          sbit doorp = P2^0;
+   6          sbit doorn = P2^1;
+   7          sbit rs = P2^5;
+   8          sbit rw = P2^6;
+   9          sbit en = P2^7;
+  10          
+  11          // Function Declarations
+  12          void lcddat (unsigned char);
+  13          void lcdcmd (unsigned char);
+  14          void lcddis (unsigned char *);
+  15          void lcd_init();
+  16          void serial_init();
+  17          void check();
+  18          void delay();
+  19          void mdelay();
+  20          
+  21          // Global Variables
+  22          unsigned char rfid[13], v1; // Changed to 13 to allow null-termination
+  23          
+  24          void main()
+  25          {
+  26   1          doorp = doorn = 0;
+  27   1          serial_init();
+  28   1          lcd_init();
+  29   1          
+  30   1          lcddis("RFID BASED CAR");
+  31   1          lcdcmd(0xC0);
+  32   1          lcddis("PARKING SYSTEM");
+  33   1          delay();
+  34   1          delay();
+  35   1          lcdcmd(0x01);
+  36   1          
+  37   1          while(1)
+  38   1          {
+  39   2              lcdcmd(0x01);
+  40   2              lcddis("SWIPE YOUR CARD");
+  41   2      
+  42   2              for(v1 = 0; v1 < 12; v1++)
+  43   2              {
+  44   3                  while(RI == 0); // Wait for UART reception
+  45   3                  rfid[v1] = SBUF; // Read received character
+  46   3                  RI = 0; // Clear Receive Interrupt Flag
+  47   3      
+  48   3                  SBUF = rfid[v1]; // Echo character back for debugging
+  49   3                  while(TI == 0);
+  50   3                  TI = 0; // Clear Transmit Interrupt Flag
+  51   3              }
+  52   2              rfid[12] = '\0'; // Null-terminate to avoid string corruption
+  53   2              check(); // Call check() only after receiving full RFID
+  54   2      
+C51 COMPILER V9.60.7.0   RFID_CAR                                                          03/25/2025 11:42:24 PAGE 2   
+
+  55   2          }
+  56   1      }
+  57          
+  58          // Function to Check RFID
+  59          void check()
+  60          {
+  61   1          static unsigned int entry_count = 0; // Tracks number of scans for each RFID
+  62   1          static char last_rfid[13] = ""; // Stores the last scanned RFID
+  63   1          
+  64   1          // Ensure full RFID is received before checking
+  65   1          if (strlen(rfid) < 12)
+  66   1              return;
+  67   1      
+  68   1          lcdcmd(0x01);
+  69   1          lcddis("RFID SCANNED:");
+  70   1          lcdcmd(0xC0);
+  71   1          lcddis(rfid); // Debugging: Show scanned RFID
+  72   1          delay();
+  73   1      
+  74   1          if (strcmp(rfid, "AB1234567890") == 0 || strcmp(rfid, "BC1234567890") == 0 ||
+  75   1              strcmp(rfid, "CD1234567890") == 0 || strcmp(rfid, "DE1234567890") == 0) 
+  76   1          {
+  77   2              // Check if the same RFID is being scanned again (to alternate entry & exit)
+  78   2              if (strcmp(last_rfid, rfid) == 0)
+  79   2              {
+  80   3                  entry_count++; // Increment scan count if the same RFID is used again
+  81   3              }
+  82   2              else
+  83   2              {
+  84   3                  entry_count = 1; // Reset count for a new RFID
+  85   3              }
+  86   2      
+  87   2              strcpy(last_rfid, rfid); // Store last scanned RFID
+  88   2              
+  89   2              lcdcmd(0x01);
+  90   2              lcddis("ACCESS GRANTED");
+  91   2      
+  92   2              if (entry_count % 2 == 1) // Odd scan: Entry
+  93   2              {
+  94   3                  lcdcmd(0xC0);
+  95   3                  
+  96   3                  // Show slot details only during entry
+  97   3                  if (strcmp(rfid, "AB1234567890") == 0)
+  98   3                      lcddis("AB - BLOCK 00");
+  99   3                  else if (strcmp(rfid, "BC1234567890") == 0)
+ 100   3                      lcddis("BC - BLOCK 01");
+ 101   3                  else if (strcmp(rfid, "CD1234567890") == 0)
+ 102   3                      lcddis("CD - BLOCK 10");
+ 103   3                  else if (strcmp(rfid, "DE1234567890") == 0)
+ 104   3                      lcddis("DE - BLOCK 11");
+ 105   3      
+ 106   3                  delay();
+ 107   3                  lcdcmd(0x01);
+ 108   3                  lcddis("DOOR OPENING");
+ 109   3                  lcdcmd(0xC0);
+ 110   3                  lcddis("ALLOW INSIDE");
+ 111   3              }
+ 112   2              else // Even scan: Exit
+ 113   2              {
+ 114   3                  lcdcmd(0x01);
+ 115   3                  lcddis("DOOR OPENING");
+ 116   3                  lcdcmd(0xC0);
+C51 COMPILER V9.60.7.0   RFID_CAR                                                          03/25/2025 11:42:24 PAGE 3   
+
+ 117   3                  lcddis("ALLOW EXIT");
+ 118   3              }
+ 119   2      
+ 120   2              doorp = 1; doorn = 0;
+ 121   2              mdelay();
+ 122   2              doorp = 0; doorn = 0;
+ 123   2              delay();
+ 124   2      
+ 125   2              lcdcmd(0x01);
+ 126   2              lcddis("DOOR CLOSING");
+ 127   2              doorp = 0; doorn = 1;
+ 128   2              mdelay();
+ 129   2              doorp = 0; doorn = 0;
+ 130   2          }
+ 131   1          else
+ 132   1          {
+ 133   2              lcdcmd(0x01);
+ 134   2              lcddis("ACCESS DENIED");
+ 135   2              lcdcmd(0xC0);
+ 136   2              lcddis("INVALID CARD");
+ 137   2              mdelay();
+ 138   2          }
+ 139   1      }
+ 140          
+ 141          
+ 142          // LCD Initialization
+ 143          void lcd_init()
+ 144          {
+ 145   1          lcdcmd(0x38);
+ 146   1          lcdcmd(0x01);
+ 147   1          lcdcmd(0x10);
+ 148   1          lcdcmd(0x0C);
+ 149   1          lcdcmd(0x80);
+ 150   1      }
+ 151          
+ 152          // LCD Command Function
+ 153          void lcdcmd(unsigned char val)
+ 154          {
+ 155   1          P1 = val;
+ 156   1          rs = 0;
+ 157   1          rw = 0;
+ 158   1          en = 1;
+ 159   1          delay();
+ 160   1          en = 0;
+ 161   1      }
+ 162          
+ 163          // LCD Data Function
+ 164          void lcddat(unsigned char val)
+ 165          {
+ 166   1          P1 = val;
+ 167   1          rs = 1;
+ 168   1          rw = 0;
+ 169   1          en = 1;
+ 170   1          delay();
+ 171   1          en = 0;
+ 172   1      }
+ 173          
+ 174          // LCD String Display Function
+ 175          void lcddis(unsigned char *s)
+ 176          {
+ 177   1          unsigned char w;
+ 178   1          for(w = 0; s[w] != '\0'; w++)
+C51 COMPILER V9.60.7.0   RFID_CAR                                                          03/25/2025 11:42:24 PAGE 4   
+
+ 179   1          {
+ 180   2              lcddat(s[w]);
+ 181   2          }
+ 182   1      }
+ 183          
+ 184          // Serial Communication Initialization
+ 185          void serial_init()
+ 186          {
+ 187   1          SCON = 0x50; // 8-bit UART Mode
+ 188   1          TMOD = 0x20; // Timer 1 Mode 2 (Auto-Reload)
+ 189   1          TH1 = -3;    // Baud Rate 9600
+ 190   1          TR1 = 1;     // Start Timer 1
+ 191   1      }
+ 192          
+ 193          // Short Delay Function
+ 194          void delay()
+ 195          {
+ 196   1          unsigned int v5;
+ 197   1          for(v5 = 0; v5 < 10000; v5++);
+ 198   1      }
+ 199          
+ 200          // Long Delay Function
+ 201          void mdelay()
+ 202          {
+ 203   1          unsigned int v6, v7;
+ 204   1          for(v6 = 0; v6 < 2; v6++)
+ 205   1          {
+ 206   2              for(v7 = 0; v7 < 60000; v7++);
+ 207   2          }
+ 208   1      }
+ 209          
+ 210          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    693    ----
+   CONSTANT SIZE    =    260    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     29       6
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
